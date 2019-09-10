@@ -1,0 +1,10 @@
+{
+    "listen_port": 53,
+    "listen_address": "0.0.0.0",
+    "runas_user": "nobody",
+    "runas_group": "nogroup",
+    "doh_urls": [
+        "https://cloudflare-dns.com/dns-query",
+        "https://dns.google/dns-query"
+    ]
+}
