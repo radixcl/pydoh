@@ -3,9 +3,8 @@
 
 # Quite simple DNS to DNS Over HTTPS proxy daemon.
 
+import argparse
 import os
-import pwd
-import grp
 import sys
 import threading
 import dnslib
@@ -13,6 +12,11 @@ import socket
 import requests
 import random
 import json
+
+if os.name == 'posix':
+    import pwd
+    import grp
+
 
 class DOH:
     def __init__(self):
@@ -57,14 +61,48 @@ class UDPThread(threading.Thread):
 
 
 def main():
-    # load config
     global config
+
+    curpath = os.path.basename(os.path.dirname(__file__))
+    if curpath == '' or curpath is None:
+        curpath = '.'
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', action='store',
+                    dest='conffile',
+                    help='Specifies config file',
+                    default='%s/config.json' % curpath,
+                    type=str)
+
+    parser.add_argument('-d', action='store_true',
+                    dest='daemon',
+                    help='Fork process into background (not available on Windows)',
+                    default=False)
+
+    args = parser.parse_args()
+
+    # load config
     try:
-        with open('config.json') as f:
+        with open(args.conffile) as f:
             config = json.load(f)
     except Exception as ex:
-        print("Could not read config file:", ex)
+        print("ERROR: Could not read config file:", ex)
         sys.exit(1)
+
+    if ((config.get('doh_urls', None) is None)
+    or (type(config.get('doh_urls', None)) == list and len(config.get('doh_urls', None)) < 1)
+    or (type(config.get('doh_urls', None)) != list)):
+        print("ERROR: No doh_urls defined in config!")
+        sys.exit(2)
+
+    # fork into background
+    if os.name == 'posix' and args.daemon:
+        p = os.fork()
+        if p > 0:
+            sys.exit(0)
+        elif p == -1:
+            print("ERROR: Couldn't fork()!")
+            sys.exit(1)
 
     sockServer = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sockServer.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -91,7 +129,7 @@ def main():
 
 
 def drop_privs(uid_name=None, gid_name=None):
-    if os.getuid() != 0 or os.name != 'posix':
+    if os.name != 'posix' or os.getuid() != 0:
         return
 
     if uid_name is None:
