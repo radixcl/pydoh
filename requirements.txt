@@ -1,1 +1,4 @@
-dnslib
+requests==2.25.1
+dnslib==0.9.19
+PyYAML==6.0
+requests_cache==0.9.1

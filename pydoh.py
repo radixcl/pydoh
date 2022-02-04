@@ -7,41 +7,17 @@ import argparse
 import os
 import sys
 import threading
+from typing import List
 import dnslib
 import socket
-import requests
-import random
-import json
 
 if os.name == 'posix':
     import pwd
     import grp
 
-
-class DOH:
-    def __init__(self):
-        #print(__name__, 'Initialized')
-        pass
-    
-    def get_doh_url(self):
-        return random.choice(config.get('doh_urls'))
-
-    def query(self, wireframe):
-        headers = {
-            'content-type': 'application/dns-message'
-        }
-
-        url = self.get_doh_url()
-        #print("Using", url)
-
-        try:
-            r = requests.post(url, headers=headers, data=wireframe, stream=True)
-            assert r.status_code == 200
-        except Exception as ex:
-            print("Error requesting DOH: ", ex)
-            return None
-
-        return r.content
+from lib import globals
+from lib.doh import DOH
+from lib import config as cnf
 
 
 class UDPThread(threading.Thread):
@@ -49,19 +25,19 @@ class UDPThread(threading.Thread):
         threading.Thread.__init__(self)
         self.client = client
         self.msg = msg
-        self.DOH = DOH()
         self.sock = sock
 
     def run(self):
-        dnsq = dnslib.DNSRecord.parse(self.msg)
-        resp = self.DOH.query(self.msg)
+        #dnsq = dnslib.DNSRecord.parse(self.msg)
+        #print("DNSQ", dnsq)
+        resp = globals.DOH.query(self.msg)
         if resp is None:
             return
         self.sock.sendto(resp, self.client)
 
 
 def main():
-    global config
+    globals.DOH = DOH()
 
     curpath = os.path.basename(os.path.dirname(__file__))
     if curpath == '' or curpath is None:
@@ -71,7 +47,7 @@ def main():
     parser.add_argument('-f', action='store',
                     dest='conffile',
                     help='Specifies config file',
-                    default='%s/config.json' % curpath,
+                    default='%s/config.yaml' % curpath,
                     type=str)
 
     parser.add_argument('-d', action='store_true',
@@ -82,17 +58,10 @@ def main():
     args = parser.parse_args()
 
     # load config
-    try:
-        with open(args.conffile) as f:
-            config = json.load(f)
-    except Exception as ex:
-        print("ERROR: Could not read config file:", ex)
-        sys.exit(1)
+    globals.config = cnf.load_config(args.conffile)
 
-    if ((config.get('doh_urls', None) is None)
-    or (type(config.get('doh_urls', None)) == list and len(config.get('doh_urls', None)) < 1)
-    or (type(config.get('doh_urls', None)) != list)):
-        print("ERROR: No doh_urls defined in config!")
+    if not hasattr(globals.config.default, "doh_urls") and type(globals.config.default.doh_urls) != list:
+        print("ERROR: No doh_urls defined in default config!")
         sys.exit(2)
 
     # fork into background
@@ -104,26 +73,26 @@ def main():
             print("ERROR: Couldn't fork()!")
             sys.exit(1)
 
-    sockServer = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sockServer.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
-        sockServer.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        sock_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     except AttributeError:
         pass # Some systems don't support SO_REUSEPORT
 
     try:
-        sockServer.bind((config.get('listen_address', '0.0.0.0'), config.get('listen_port', 53)))
-        print("Listening on:", config.get('listen_address', '0.0.0.0'), config.get('listen_port', 53))
+        sock_server.bind((globals.config.service.get('listen_address', '0.0.0.0'), globals.config.service.get('listen_port', 53)))
+        print("Listening on:", globals.config.service.get('listen_address', '0.0.0.0'), globals.config.service.get('listen_port', 53))
     except Exception as ex:
-        print("Couldn't listen on %s:%s\n%s" % (config.get('listen_address', '0.0.0.0'), config.get('listen_port', 53), str(ex)))
+        print("Couldn't listen on %s:%s\n%s" % (globals.config.service.get('listen_address', '0.0.0.0'), globals.config.service.get('listen_port', 53), str(ex)))
         sys.exit(1)
     
     drop_privs()
     
     while True:
-        msg, client = sockServer.recvfrom(1024)
+        msg, client = sock_server.recvfrom(1024)
         
-        newthread = UDPThread(client, msg, sockServer)
+        newthread = UDPThread(client, msg, sock_server)
         newthread.setDaemon(True)
         newthread.start()
 
@@ -133,9 +102,9 @@ def drop_privs(uid_name=None, gid_name=None):
         return
 
     if uid_name is None:
-        uid_name = config.get('runas_user', 'nobody')
+        uid_name = globals.config.service.get('runas_user', 'nobody')
     if gid_name is None:
-        gid_name = config.get('runas_group', 'nobody')
+        gid_name = globals.config.service.get('runas_group', 'nobody')
 
     print("Dropping privileges...")
 
@@ -151,5 +120,5 @@ def drop_privs(uid_name=None, gid_name=None):
 
 
 if __name__ == '__main__':
-    config = None
+    globals.config = None
     main()

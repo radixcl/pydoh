@@ -1,0 +1,32 @@
+---
+service:
+  listen_port: 53
+  listen_address: 0.0.0.0
+  runas_user: nobody
+  runas_group: nogroup
+  check_doh_ssl: true
+
+default:
+  doh_url_select: "roundrobin"  # random, roundrobin
+  doh_max_retries: 5
+  doh_urls:
+  - https://cloudflare-dns.com/dns-query
+  - https://dns.google/dns-query
+  - https://blitz.ahadns.com
+  - https://dns.bebasid.com/dns-query
+  - https://doh.opendns.com/dns-query
+  - https://doh.familyshield.opendns.com/dns-query
+  - https://dns.digitalsize.net/dns-query
+
+rules:
+  match:
+    - domain: '.google\.com\.$'
+      doh_url_select: "random"  # random, roundrobin
+      doh_max_retries: 15
+      doh_urls:
+      - https://dns.google/dns-query
+
+    - domain: '.localhost\.com\.$'
+      static:
+        A: 127.0.0.1
+        TXT: localmachine
