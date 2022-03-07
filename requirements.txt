@@ -1,4 +1,7 @@
-requests==2.25.1
-dnslib==0.9.19
-PyYAML==6.0
-requests_cache==0.9.1
+dnslib~=0.9.19
+dnspython~=2.2.1
+python_box~=5.4.1
+PyYAML~=6.0
+requests~=2.25.1
+requests_cache~=0.9.3
+urllib3~=1.26.8
