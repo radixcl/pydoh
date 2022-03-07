@@ -5,6 +5,9 @@ service:
   runas_user: nobody
   runas_group: nogroup
   check_doh_ssl: true
+  initial_dns:
+  - 1.1.1.1
+  - 8.8.8.8
 
 default:
   doh_url_select: "roundrobin"  # random, roundrobin
